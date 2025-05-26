@@ -27,3 +27,8 @@ configs/*.yaml
 !configs/ltxv_2b_lora_low_vram.yaml
 outputs
 *.mov
+src/ltxv_trainer/__pycache__/__init__.cpython-311.pyc
+src/ltxv_trainer/__pycache__/datasets.cpython-311.pyc
+src/ltxv_trainer/__pycache__/ltxv_utils.cpython-311.pyc
+src/ltxv_trainer/__pycache__/model_loader.cpython-311.pyc
+src/ltxv_trainer/__pycache__/utils.cpython-311.pyc
