@@ -353,13 +353,34 @@ class UnifiedTrainer:
         temp_caption_file = data_folder / "temp_captions.txt"
         temp_video_file = data_folder / "temp_videos.txt"
         
+        # Clean up any existing temp files first
+        if temp_caption_file.exists():
+            temp_caption_file.unlink()
+            self.console.print("[blue]Removed existing temp_captions.txt[/]")
+        if temp_video_file.exists():
+            temp_video_file.unlink()
+            self.console.print("[blue]Removed existing temp_videos.txt[/]")
+        
         try:
-            # Write temporary files
+            # Write temporary files with explicit debugging
+            self.console.print(f"[blue]Writing {len(captions)} captions to {temp_caption_file}[/]")
             with open(temp_caption_file, 'w', encoding='utf-8') as f:
                 f.write('\n'.join(captions))
             
+            self.console.print(f"[blue]Writing {len(video_files)} video paths to {temp_video_file}[/]")
             with open(temp_video_file, 'w', encoding='utf-8') as f:
                 f.write('\n'.join(video_files))
+            
+            # Verify the files were written correctly
+            with open(temp_caption_file, 'r', encoding='utf-8') as f:
+                written_captions = f.read().strip().split('\n')
+            with open(temp_video_file, 'r', encoding='utf-8') as f:
+                written_videos = f.read().strip().split('\n')
+            
+            self.console.print(f"[blue]Verification: {len(written_captions)} captions, {len(written_videos)} videos in temp files[/]")
+            
+            if len(written_captions) != len(written_videos):
+                raise ValueError(f"Temp file mismatch: {len(written_captions)} captions vs {len(written_videos)} videos")
             
             # Set up preprocessing arguments
             preprocessing_args = PreprocessingArgs(
