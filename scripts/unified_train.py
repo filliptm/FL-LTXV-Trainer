@@ -282,22 +282,23 @@ class UnifiedTrainer:
             
         # Find all video files and their corresponding text files
         video_extensions = {'.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v'}
-        video_files = []
-        captions = []
-        skipped_videos = 0
-        skipped_texts = 0
         
-        # First pass: collect all video files that have corresponding text files
+        # Collect all files and filter out temp files
         all_files = list(data_folder.iterdir())
         video_file_paths = [f for f in all_files if f.suffix.lower() in video_extensions]
-        text_file_paths = [f for f in all_files if f.suffix.lower() == '.txt']
+        text_file_paths = [f for f in all_files if f.suffix.lower() == '.txt' and 'temp_' not in f.name]
         
         self.console.print(f"[blue]Found {len(video_file_paths)} video files and {len(text_file_paths)} text files[/]")
+        
+        # Create pairs by finding matching video/text combinations
+        valid_pairs = []
+        skipped_videos = 0
+        skipped_texts = 0
         
         for video_file in video_file_paths:
             # Look for corresponding text file
             text_file = video_file.with_suffix('.txt')
-            if text_file.exists() and text_file in text_file_paths:
+            if text_file.exists():
                 try:
                     with open(text_file, 'r', encoding='utf-8') as f:
                         caption = f.read().strip()
@@ -312,8 +313,9 @@ class UnifiedTrainer:
                     if dataset_config.id_token:
                         caption = f"{dataset_config.id_token} {caption}"
                     
-                    video_files.append(str(video_file.relative_to(data_folder)))
-                    captions.append(caption)
+                    # Add as a pair
+                    valid_pairs.append((str(video_file.relative_to(data_folder)), caption))
+                        
                 except Exception as e:
                     self.console.print(f"[yellow]Warning: Error reading {text_file.name}: {e}, skipping[/]")
                     skipped_videos += 1
@@ -321,19 +323,23 @@ class UnifiedTrainer:
                 self.console.print(f"[yellow]Warning: No text file found for {video_file.name}[/]")
                 skipped_videos += 1
         
-        # Check for orphaned text files (text files without corresponding videos)
+        # Count orphaned text files
         for text_file in text_file_paths:
-            video_file = text_file.with_suffix('.mp4')  # Check common extensions
-            if not video_file.exists():
-                # Try other extensions
-                found_video = False
-                for ext in video_extensions:
-                    potential_video = text_file.with_suffix(ext)
-                    if potential_video.exists():
-                        found_video = True
-                        break
-                if not found_video:
-                    skipped_texts += 1
+            found_video = False
+            for ext in video_extensions:
+                potential_video = text_file.with_suffix(ext)
+                if potential_video.exists():
+                    found_video = True
+                    break
+            if not found_video:
+                skipped_texts += 1
+        
+        # Extract video files and captions from valid pairs
+        video_files = [pair[0] for pair in valid_pairs]
+        captions = [pair[1] for pair in valid_pairs]
+        
+        self.console.print(f"[blue]Created {len(valid_pairs)} valid pairs[/]")
+        self.console.print(f"[blue]Final counts: {len(video_files)} videos, {len(captions)} captions[/]")
         
         if skipped_videos > 0:
             self.console.print(f"[yellow]Skipped {skipped_videos} videos (missing/empty text files)[/]")
