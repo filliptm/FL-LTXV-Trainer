@@ -1,0 +1,592 @@
+# LTX-Video Trainer Project Overview
+
+## General Project Description
+
+This is a comprehensive training framework for Lightricks' LTX-Video (LTXV) model, a state-of-the-art video generation AI model. The project enables both LoRA (Low-Rank Adaptation) fine-tuning and full model fine-tuning on custom datasets. It provides a complete pipeline from raw video processing to trained model deployment, including dataset preprocessing, video captioning, scene splitting, and model training with various optimization techniques.
+
+The system is designed to be modular, efficient, and user-friendly, supporting both single-GPU and multi-GPU distributed training scenarios. It integrates with Hugging Face Hub for model sharing and ComfyUI for inference deployment.
+
+---
+
+## Project Directory Structure
+
+```
+LTX-Video-Trainer/
+├── .gitignore                              # Git version control exclusions
+├── .pre-commit-config.yaml                 # Code quality automation hooks
+├── pyproject.toml                          # Modern Python project configuration
+├── README.md                               # Comprehensive project documentation
+├── requirements.txt                        # Python package dependencies
+├── Project_Overview.txt                    # This overview document
+│
+├── configs/                                # Training configuration templates
+│   ├── ltxv_13b_lora_cakeify.yaml         # LTXV 13B LoRA config (cakeify effect)
+│   ├── ltxv_2b_full.yaml                  # LTXV 2B full fine-tuning config
+│   ├── ltxv_2b_lora.yaml                  # LTXV 2B standard LoRA config
+│   └── ltxv_2b_lora_low_vram.yaml         # LTXV 2B memory-optimized LoRA config
+│
+├── data/                                   # Data directory
+│   └── tempt.txt                           # Placeholder/test file
+│
+├── scripts/                                # Executable scripts for various tasks
+│   ├── caption_videos.py                  # Automated video/image captioning
+│   ├── convert_checkpoint.py              # Model format conversion (Diffusers ↔ ComfyUI)
+│   ├── decode_latents.py                  # Decode latents back to videos for verification
+│   ├── preprocess_dataset.py              # Dataset preprocessing (latents + embeddings)
+│   ├── run_pipeline.py                    # Master pipeline orchestration script
+│   ├── split_scenes.py                    # Intelligent video scene detection and splitting
+│   ├── train_distributed.py               # Multi-GPU distributed training launcher
+│   └── train.py                           # Main training script
+│
+└── src/                                    # Source code package
+    └── ltxv_trainer/                       # Main Python package
+        ├── __init__.py                     # Package initialization and logging setup
+        ├── captioning.py                   # Video/image captioning infrastructure
+        ├── config.py                       # Pydantic-based configuration system
+        ├── datasets.py                     # Dataset implementations and data loading
+        ├── hf_hub_utils.py                 # Hugging Face Hub integration utilities
+        ├── ltxv_utils.py                   # Core LTXV model operation utilities
+        ├── model_loader.py                 # Model loading and management system
+        ├── quantization.py                 # Model quantization for memory optimization
+        ├── timestep_samplers.py            # Timestep sampling strategies for training
+        ├── trainer.py                      # Core training engine and pipeline
+        └── utils.py                        # General utility functions
+
+Generated during usage:
+├── outputs/                                # Training outputs (created during training)
+│   └── [project_name]/                     # Project-specific output directory
+│       ├── checkpoints/                    # Model checkpoints during training
+│       ├── config.yaml                     # Instantiated training configuration
+│       └── validation_videos/              # Generated validation videos
+│
+├── [basename]_raw/                         # Raw video input directory (user-created)
+│   └── *.mp4, *.mov, *.avi                # Raw video files for processing
+│
+├── [basename]_scenes/                      # Processed scenes directory (auto-generated)
+│   ├── *.mp4                              # Split scene video files
+│   ├── captions.json                       # Generated captions for scenes
+│   └── .precomputed/                       # Preprocessed training data
+│       ├── latents/                        # Cached video latent representations
+│       ├── conditions/                     # Cached text embeddings
+│       └── decoded_videos/                 # Decoded videos for verification
+│
+└── .venv/                                  # Python virtual environment (after setup)
+    └── ...                                 # Installed dependencies
+```
+
+**Directory Descriptions:**
+
+- **Root Level**: Project configuration, documentation, and dependency management
+- **configs/**: Ready-to-use training configuration templates for different scenarios
+- **data/**: Input data directory (currently contains placeholder files)
+- **scripts/**: Command-line tools for each stage of the pipeline
+- **src/ltxv_trainer/**: Core Python package with modular components
+- **outputs/**: Generated during training, contains checkpoints and results
+- **[basename]_raw/**: User-provided raw videos for processing
+- **[basename]_scenes/**: Auto-generated processed scenes and training data
+- **.venv/**: Python virtual environment (created during setup)
+
+---
+
+## Root Level Configuration Files
+
+### README.md
+**Purpose**: Comprehensive documentation and user guide for the entire project.
+**Key Features**:
+- Complete setup instructions and installation guide
+- Detailed workflow documentation for dataset preparation
+- Training configuration examples and best practices
+- Usage examples for all major scripts
+- Integration guides for ComfyUI and Hugging Face Hub
+- Troubleshooting and optimization tips
+
+### requirements.txt
+**Purpose**: Python package dependencies for the project.
+**Key Dependencies**:
+- PyTorch ecosystem (torch, torchvision, torchaudio)
+- Hugging Face libraries (transformers, diffusers, accelerate, peft)
+- Video processing (opencv-python, imageio, decord)
+- Data handling (pandas, safetensors)
+- UI and logging (rich, typer, loguru)
+- Quantization and optimization (optimum-quanto, bitsandbytes)
+- Scene detection (scenedetect)
+
+### pyproject.toml
+**Purpose**: Modern Python project configuration using PEP 518 standards.
+**Key Features**:
+- Project metadata and dependencies
+- Development dependencies (pre-commit, ruff)
+- Code quality configuration (linting, formatting rules)
+- Build system configuration using Hatchling
+
+### .gitignore
+**Purpose**: Git version control exclusions.
+**Excludes**:
+- Python cache files and virtual environments
+- Media files (videos, images, model weights)
+- Output directories and temporary files
+- IDE-specific files
+- Allows specific example configuration files
+
+### .pre-commit-config.yaml
+**Purpose**: Automated code quality checks before commits.
+**Features**:
+- File validation (YAML, TOML, Python AST)
+- Code formatting and linting with Ruff
+- Large file detection and whitespace cleanup
+
+---
+
+## Configuration Directory (configs/)
+
+### ltxv_13b_lora_cakeify.yaml
+**Purpose**: Example LoRA training configuration for LTXV 13B model with "cakeify" effect.
+**Key Settings**:
+- Model: LTXV_13B_097_DEV with LoRA training mode
+- LoRA parameters: rank=32, alpha=32, targeting attention layers
+- Optimization: 2000 steps, 2e-4 learning rate, gradient checkpointing enabled
+- Validation prompts for "cakeify" effect testing
+- Output directory: outputs/cakeify_lora_13b
+
+### ltxv_2b_full.yaml
+**Purpose**: Full model fine-tuning configuration for LTXV 2B model.
+**Key Settings**:
+- Model: LTXV_2B_0.9.6_DEV with full training mode
+- Lower learning rate (1e-5) suitable for full fine-tuning
+- Higher gradient accumulation (4 steps) for stability
+- Text encoder 8-bit loading for memory efficiency
+- Torch compilation enabled for performance
+
+### ltxv_2b_lora.yaml
+**Purpose**: Standard LoRA training configuration for LTXV 2B model.
+**Key Settings**:
+- Model: LTXV_2B_0.9.6_DEV with LoRA training mode
+- Balanced settings for general LoRA training
+- 1500 training steps with linear scheduler
+- Text encoder 8-bit loading enabled
+
+### ltxv_2b_lora_low_vram.yaml
+**Purpose**: Memory-optimized LoRA configuration for systems with limited VRAM (24GB).
+**Key Settings**:
+- 8-bit optimizer (adamw8bit) for memory savings
+- Gradient checkpointing enabled
+- FP8 quantization for further memory reduction
+- Same LoRA parameters as standard config but optimized for low memory
+
+---
+
+## Scripts Directory (scripts/)
+
+### caption_videos.py
+**Purpose**: Automated video and image captioning using vision-language models.
+**Key Features**:
+- Supports multiple VLM models (Qwen2.5-VL, LLaVA-NeXT)
+- Batch processing of directories or individual files
+- Multiple output formats (TXT, CSV, JSON, JSONL)
+- Relative path handling for dataset portability
+- Resume capability with existing caption detection
+- 8-bit quantization support for memory efficiency
+- Rich progress bars and error handling
+
+**Main Functions**:
+- `caption_media()`: Core captioning pipeline
+- `_get_media_files()`: File discovery and filtering
+- `_save_captions()`: Multi-format output handling
+- `_load_existing_captions()`: Resume functionality
+
+### convert_checkpoint.py
+**Purpose**: Convert model checkpoints between Diffusers and ComfyUI formats.
+**Key Features**:
+- Bidirectional conversion support
+- Automatic output path generation with appropriate suffixes
+- Error handling and validation
+- Simple command-line interface
+
+**Main Functions**:
+- `main()`: CLI interface for checkpoint conversion
+- Uses `ltxv_trainer.utils.convert_checkpoint()` for actual conversion
+
+### decode_latents.py
+**Purpose**: Decode precomputed video latents back into viewable videos for verification.
+**Key Features**:
+- VAE-based latent decoding
+- Batch processing of latent directories
+- Video output with configurable codec settings
+- Memory-efficient processing with torch.inference_mode
+- Progress tracking and error handling
+
+**Main Classes**:
+- `LatentsDecoder`: Handles VAE loading and latent decoding
+- Supports multiple model sources and device selection
+
+### preprocess_dataset.py
+**Purpose**: Comprehensive dataset preprocessing for training acceleration.
+**Key Features**:
+- Video/image latent encoding using VAE
+- Text embedding computation using T5 encoder
+- Resolution bucket organization
+- Batch processing with configurable workers
+- Optional video decoding for verification
+- Support for multiple dataset formats (directory, CSV, JSON, JSONL)
+- LoRA trigger token support
+- Memory optimization options (8-bit text encoder, VAE tiling)
+
+**Main Classes**:
+- `DatasetPreprocessor`: Core preprocessing pipeline
+- `PreprocessingArgs`: Configuration model
+- Supports both file-based and directory-based datasets
+
+### run_pipeline.py
+**Purpose**: Master orchestration script for complete training pipeline.
+**Key Features**:
+- End-to-end automation from raw videos to trained model
+- Scene splitting → captioning → preprocessing → training → conversion
+- Template-based configuration instantiation
+- Automatic validation prompt extraction
+- ComfyUI format conversion
+- Progress tracking across all stages
+
+**Pipeline Stages**:
+1. `process_raw_videos()`: Scene splitting from raw footage
+2. `process_scenes()`: Automatic captioning
+3. `preprocess_data()`: Dataset preprocessing
+4. `prepare_and_run_training()`: Training execution and model conversion
+
+### split_scenes.py
+**Purpose**: Intelligent video scene detection and splitting using PySceneDetect.
+**Key Features**:
+- Multiple detection algorithms (content, adaptive, threshold, histogram)
+- Configurable detection parameters and thresholds
+- Scene filtering by duration
+- Preview image generation
+- HTML report generation
+- Flexible timecode parsing (frames, seconds, HH:MM:SS)
+- FFmpeg-based video splitting
+
+**Main Functions**:
+- `detect_and_split_scenes()`: Core scene detection pipeline
+- `create_detector()`: Detector factory with parameter configuration
+- `parse_timecode()`: Flexible time format parsing
+
+### train_distributed.py
+**Purpose**: Multi-GPU distributed training launcher using Hugging Face Accelerate.
+**Key Features**:
+- Automatic GPU detection via nvidia-smi
+- Accelerate integration for distributed training
+- Progress bar control for multi-GPU scenarios
+- Command-line argument forwarding
+
+**Main Functions**:
+- `main()`: CLI interface for distributed training setup
+- Automatic process count detection and configuration
+
+### train.py
+**Purpose**: Main training script with YAML configuration loading.
+**Key Features**:
+- YAML configuration parsing and validation
+- Pydantic model integration for type safety
+- Error handling and user feedback
+- Simple CLI interface
+
+**Main Functions**:
+- `main()`: Configuration loading and trainer initialization
+- Integrates with `LtxvTrainer` class for actual training
+
+---
+
+## Source Code Directory (src/ltxv_trainer/)
+
+### __init__.py
+**Purpose**: Package initialization with logging configuration.
+**Key Features**:
+- Rich-based logging setup with rank-aware formatting
+- Multi-GPU environment detection
+- Logging level configuration based on process rank
+- Exposed logging functions for package-wide use
+
+### captioning.py
+**Purpose**: Video and image captioning infrastructure using vision-language models.
+**Key Features**:
+- Abstract base class for captioning models
+- Transformers-based VLM implementation
+- Support for Qwen2.5-VL and LLaVA-NeXT models
+- Caption cleaning and post-processing
+- 8-bit quantization support
+- Configurable instruction prompts
+
+**Main Classes**:
+- `MediaCaptioningModel`: Abstract base for captioning models
+- `TransformersVlmCaptioner`: Transformers-based implementation
+- `CaptionerType`: Enum for supported model types
+
+### config.py
+**Purpose**: Comprehensive configuration system using Pydantic models.
+**Key Features**:
+- Type-safe configuration with validation
+- Hierarchical configuration structure
+- Field validation and default values
+- Support for multiple model sources and training modes
+
+**Main Classes**:
+- `LtxvTrainerConfig`: Root configuration class
+- `ModelConfig`: Base model and training mode settings
+- `LoraConfig`: LoRA-specific parameters
+- `OptimizationConfig`: Training optimization settings
+- `AccelerationConfig`: Hardware acceleration options
+- `DataConfig`: Data loading configuration
+- `ValidationConfig`: Validation and inference settings
+- `CheckpointsConfig`: Checkpoint management
+- `HubConfig`: Hugging Face Hub integration
+- `FlowMatchingConfig`: Flow matching training parameters
+
+### datasets.py
+**Purpose**: Dataset implementations for training data loading.
+**Key Features**:
+- Multiple dataset types for different use cases
+- Video and image preprocessing with resolution buckets
+- Precomputed latent and embedding loading
+- Caption cleaning and preprocessing
+- Bucket sampling for efficient batching
+
+**Main Classes**:
+- `DummyDataset`: Random data for testing and benchmarking
+- `ImageOrVideoDataset`: Basic media dataset with preprocessing
+- `ImageOrVideoDatasetWithResizing`: Dataset with resizing support
+- `ImageOrVideoDatasetWithResizeAndRectangleCrop`: Advanced preprocessing with cropping
+- `PrecomputedDataset`: Loads precomputed latents and embeddings
+- `BucketSampler`: Efficient sampling for resolution buckets
+
+### hf_hub_utils.py
+**Purpose**: Hugging Face Hub integration for model sharing.
+**Key Features**:
+- Automated model card generation
+- Video-to-GIF conversion for previews
+- Model weight uploading
+- Training metadata inclusion
+- Progress tracking for uploads
+
+**Main Functions**:
+- `push_to_hub()`: Complete Hub upload pipeline
+- `_convert_video_to_gif()`: Video preview generation
+- `_create_model_card()`: Automated documentation generation
+
+### ltxv_utils.py
+**Purpose**: Core utilities for LTXV model operations.
+**Key Features**:
+- Text prompt encoding using T5
+- Video/image encoding using VAE
+- Latent packing and normalization
+- Video decoding from latents
+- Device and memory management
+
+**Main Functions**:
+- `encode_prompt()`: Text-to-embedding conversion
+- `encode_video()`: Media-to-latent conversion
+- `decode_video()`: Latent-to-video conversion
+- `pack_latents()`: Latent tensor organization
+
+### model_loader.py
+**Purpose**: Model loading and management system.
+**Key Features**:
+- Support for multiple LTXV model versions
+- Component-wise loading (VAE, transformer, text encoder, tokenizer)
+- Hugging Face Hub and local path support
+- Special handling for LTXV-13B model
+- Memory optimization options
+
+**Main Classes**:
+- `LtxvModelVersion`: Enum for supported model versions
+- `LtxvModelComponents`: Container for loaded model components
+
+**Main Functions**:
+- `load_vae()`: VAE model loading with optimization
+- `load_transformer()`: Transformer model loading
+- `load_text_encoder()`: T5 text encoder loading
+- `load_tokenizer()`: T5 tokenizer loading
+- `load_ltxv_components()`: Complete model loading
+
+### quantization.py
+**Purpose**: Model quantization for memory optimization.
+**Key Features**:
+- Integration with Optimum Quanto library
+- Multiple quantization precisions (int8, int4, int2, fp8)
+- Automatic precision mapping
+- Memory-efficient model loading
+
+**Main Functions**:
+- `quantize_model()`: Apply quantization to models
+- `_quanto_type_map()`: Precision type mapping
+
+### timestep_samplers.py
+**Purpose**: Timestep sampling strategies for flow matching training.
+**Key Features**:
+- Multiple sampling strategies (uniform, shifted logit normal)
+- Sequence length-aware sampling
+- Configurable sampling parameters
+- Batch-aware sampling interface
+
+**Main Classes**:
+- `TimestepSampler`: Base class for sampling strategies
+- `UniformTimestepSampler`: Uniform distribution sampling
+- `ShiftedLogitNormalTimestepSampler`: Advanced sampling with sequence length adaptation
+
+### trainer.py
+**Purpose**: Core training engine for LTXV models.
+**Key Features**:
+- Complete training pipeline implementation
+- LoRA and full fine-tuning support
+- Multi-GPU distributed training
+- Checkpoint management and resuming
+- Validation video generation
+- Progress tracking and logging
+- Memory optimization techniques
+- Hugging Face Hub integration
+
+**Main Classes**:
+- `LtxvTrainer`: Main training class
+- `TrainingStats`: Training metrics tracking
+
+**Key Methods**:
+- `train()`: Main training loop
+- `_training_step()`: Single training step
+- `_sample_videos()`: Validation video generation
+- `_save_checkpoint()`: Checkpoint saving
+- `_load_checkpoint()`: Checkpoint loading and resuming
+
+### utils.py
+**Purpose**: General utility functions for the project.
+**Key Features**:
+- GPU memory monitoring
+- Image processing utilities
+- Checkpoint format conversion
+- Cross-platform compatibility
+
+**Main Functions**:
+- `get_gpu_memory_gb()`: GPU memory usage monitoring
+- `open_image_as_srgb()`: Standardized image loading
+- `convert_checkpoint()`: Format conversion between Diffusers and ComfyUI
+
+---
+
+## Data Directory (data/)
+
+### tempt.txt
+**Purpose**: Placeholder file (contains only "wwd").
+**Note**: This appears to be a temporary or test file with minimal content.
+
+---
+
+## How the System Works Together
+
+### 1. Dataset Preparation Pipeline
+The system provides a complete pipeline for preparing training data:
+
+1. **Raw Video Processing** (`split_scenes.py`):
+   - Takes long-form videos and intelligently splits them into coherent scenes
+   - Uses multiple detection algorithms to identify scene boundaries
+   - Filters out scenes that are too short or long
+   - Generates preview images and HTML reports
+
+2. **Automatic Captioning** (`caption_videos.py`):
+   - Processes video scenes or images to generate descriptive captions
+   - Uses state-of-the-art vision-language models (Qwen2.5-VL, LLaVA-NeXT)
+   - Supports batch processing and resume functionality
+   - Outputs in multiple formats for flexibility
+
+3. **Dataset Preprocessing** (`preprocess_dataset.py`):
+   - Converts videos/images to latent representations using VAE
+   - Computes text embeddings for captions using T5 encoder
+   - Organizes data into resolution buckets for efficient training
+   - Caches results to accelerate training and reduce memory usage
+
+### 2. Training System
+The training system is highly configurable and optimized:
+
+1. **Configuration Management** (`config.py`):
+   - Pydantic-based type-safe configuration system
+   - Hierarchical organization of training parameters
+   - Validation and default value handling
+   - Support for both LoRA and full fine-tuning modes
+
+2. **Model Loading** (`model_loader.py`):
+   - Flexible model loading from multiple sources (HF Hub, local paths, URLs)
+   - Component-wise loading for memory efficiency
+   - Version management for different LTXV model variants
+   - Optimization options (quantization, 8-bit loading)
+
+3. **Training Engine** (`trainer.py`):
+   - Complete training loop with progress tracking
+   - Support for both single-GPU and distributed training
+   - Automatic checkpoint saving and resuming
+   - Validation video generation during training
+   - Memory optimization techniques (gradient checkpointing, mixed precision)
+   - Integration with Hugging Face Hub for model sharing
+
+### 3. Data Loading and Processing
+The system provides efficient data loading:
+
+1. **Dataset Classes** (`datasets.py`):
+   - Multiple dataset implementations for different scenarios
+   - Efficient preprocessing with resolution bucket support
+   - Precomputed latent and embedding loading
+   - Caption cleaning and normalization
+
+2. **Sampling Strategies** (`timestep_samplers.py`):
+   - Advanced timestep sampling for flow matching training
+   - Sequence length-aware sampling for optimal training
+   - Multiple sampling strategies for different training scenarios
+
+### 4. Optimization and Acceleration
+The system includes comprehensive optimization:
+
+1. **Quantization** (`quantization.py`):
+   - Model quantization for memory reduction
+   - Multiple precision options (int8, int4, fp8)
+   - Integration with Optimum Quanto library
+
+2. **Memory Management**:
+   - Gradient checkpointing for large models
+   - Mixed precision training (fp16, bf16)
+   - 8-bit optimizer and text encoder loading
+   - VAE tiling for large resolutions
+
+### 5. Deployment and Integration
+The system supports multiple deployment scenarios:
+
+1. **Format Conversion** (`convert_checkpoint.py`):
+   - Bidirectional conversion between Diffusers and ComfyUI formats
+   - Enables deployment in different inference frameworks
+
+2. **Hub Integration** (`hf_hub_utils.py`):
+   - Automated model sharing on Hugging Face Hub
+   - Model card generation with training details
+   - Video preview generation for model cards
+
+### 6. Orchestration and Automation
+The system provides high-level automation:
+
+1. **Pipeline Orchestration** (`run_pipeline.py`):
+   - End-to-end automation from raw videos to trained models
+   - Template-based configuration management
+   - Automatic validation prompt extraction
+   - Progress tracking across all pipeline stages
+
+2. **Distributed Training** (`train_distributed.py`):
+   - Multi-GPU training setup using Hugging Face Accelerate
+   - Automatic GPU detection and configuration
+   - Scalable training for large datasets and models
+
+### 7. Monitoring and Debugging
+The system includes comprehensive monitoring:
+
+1. **Logging System** (`__init__.py`):
+   - Rich-based logging with progress bars
+   - Multi-GPU aware logging with rank information
+   - Configurable log levels for different scenarios
+
+2. **Utilities** (`utils.py`):
+   - GPU memory monitoring for optimization
+   - Image processing utilities for debugging
+   - Cross-platform compatibility functions
+
+This comprehensive system enables researchers and practitioners to efficiently train custom video generation models using the LTX-Video architecture, with support for various optimization techniques, deployment scenarios, and automation levels.
