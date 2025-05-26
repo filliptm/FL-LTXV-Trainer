@@ -284,14 +284,29 @@ class UnifiedTrainer:
         video_extensions = {'.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v'}
         video_files = []
         captions = []
+        skipped_videos = 0
+        skipped_texts = 0
         
-        for video_file in data_folder.iterdir():
-            if video_file.suffix.lower() in video_extensions:
-                # Look for corresponding text file
-                text_file = video_file.with_suffix('.txt')
-                if text_file.exists():
+        # First pass: collect all video files that have corresponding text files
+        all_files = list(data_folder.iterdir())
+        video_file_paths = [f for f in all_files if f.suffix.lower() in video_extensions]
+        text_file_paths = [f for f in all_files if f.suffix.lower() == '.txt']
+        
+        self.console.print(f"[blue]Found {len(video_file_paths)} video files and {len(text_file_paths)} text files[/]")
+        
+        for video_file in video_file_paths:
+            # Look for corresponding text file
+            text_file = video_file.with_suffix('.txt')
+            if text_file.exists() and text_file in text_file_paths:
+                try:
                     with open(text_file, 'r', encoding='utf-8') as f:
                         caption = f.read().strip()
+                    
+                    # Skip empty captions
+                    if not caption:
+                        self.console.print(f"[yellow]Warning: Empty caption for {video_file.name}, skipping[/]")
+                        skipped_videos += 1
+                        continue
                     
                     # Add id_token if specified
                     if dataset_config.id_token:
@@ -299,13 +314,40 @@ class UnifiedTrainer:
                     
                     video_files.append(str(video_file.relative_to(data_folder)))
                     captions.append(caption)
-                else:
-                    self.console.print(f"[yellow]Warning: No text file found for {video_file.name}[/]")
+                except Exception as e:
+                    self.console.print(f"[yellow]Warning: Error reading {text_file.name}: {e}, skipping[/]")
+                    skipped_videos += 1
+            else:
+                self.console.print(f"[yellow]Warning: No text file found for {video_file.name}[/]")
+                skipped_videos += 1
+        
+        # Check for orphaned text files (text files without corresponding videos)
+        for text_file in text_file_paths:
+            video_file = text_file.with_suffix('.mp4')  # Check common extensions
+            if not video_file.exists():
+                # Try other extensions
+                found_video = False
+                for ext in video_extensions:
+                    potential_video = text_file.with_suffix(ext)
+                    if potential_video.exists():
+                        found_video = True
+                        break
+                if not found_video:
+                    skipped_texts += 1
+        
+        if skipped_videos > 0:
+            self.console.print(f"[yellow]Skipped {skipped_videos} videos (missing/empty text files)[/]")
+        if skipped_texts > 0:
+            self.console.print(f"[yellow]Found {skipped_texts} orphaned text files (no corresponding video)[/]")
         
         if not video_files:
-            raise ValueError(f"No paired video and text files found in {data_folder}")
+            raise ValueError(f"No valid paired video and text files found in {data_folder}")
             
-        self.console.print(f"[green]Found {len(video_files)} paired video/text files[/]")
+        self.console.print(f"[green]Found {len(video_files)} valid paired video/text files[/]")
+        
+        # Verify counts match
+        if len(video_files) != len(captions):
+            raise ValueError(f"Internal error: video files ({len(video_files)}) and captions ({len(captions)}) count mismatch")
         
         # Create temporary files for the preprocessor
         temp_caption_file = data_folder / "temp_captions.txt"
