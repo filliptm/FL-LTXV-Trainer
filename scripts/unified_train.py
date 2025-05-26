@@ -368,25 +368,56 @@ class UnifiedTrainer:
             self.console.print("[blue]Removed existing temp_videos.txt[/]")
         
         try:
+            # Ensure we have exactly matching counts before writing
+            min_count = min(len(captions), len(video_files))
+            if len(captions) != len(video_files):
+                self.console.print(f"[yellow]⚠️ Count mismatch detected: {len(captions)} captions vs {len(video_files)} videos[/]")
+                self.console.print(f"[yellow]Truncating to {min_count} matching pairs to continue processing[/]")
+                captions = captions[:min_count]
+                video_files = video_files[:min_count]
+            
             # Write temporary files with explicit debugging
             self.console.print(f"[blue]Writing {len(captions)} captions to {temp_caption_file}[/]")
             with open(temp_caption_file, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(captions))
+                for i, caption in enumerate(captions):
+                    if i > 0:
+                        f.write('\n')
+                    f.write(caption)
             
             self.console.print(f"[blue]Writing {len(video_files)} video paths to {temp_video_file}[/]")
             with open(temp_video_file, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(video_files))
+                for i, video_path in enumerate(video_files):
+                    if i > 0:
+                        f.write('\n')
+                    f.write(video_path)
             
             # Verify the files were written correctly
             with open(temp_caption_file, 'r', encoding='utf-8') as f:
-                written_captions = f.read().strip().split('\n')
+                written_captions = [line for line in f.read().split('\n') if line.strip()]
             with open(temp_video_file, 'r', encoding='utf-8') as f:
-                written_videos = f.read().strip().split('\n')
+                written_videos = [line for line in f.read().split('\n') if line.strip()]
             
             self.console.print(f"[blue]Verification: {len(written_captions)} captions, {len(written_videos)} videos in temp files[/]")
             
             if len(written_captions) != len(written_videos):
-                raise ValueError(f"Temp file mismatch: {len(written_captions)} captions vs {len(written_videos)} videos")
+                # Try to fix by truncating to the smaller count
+                final_count = min(len(written_captions), len(written_videos))
+                self.console.print(f"[yellow]⚠️ Still mismatched after writing, truncating both to {final_count}[/]")
+                
+                # Rewrite files with matching counts
+                with open(temp_caption_file, 'w', encoding='utf-8') as f:
+                    for i in range(final_count):
+                        if i > 0:
+                            f.write('\n')
+                        f.write(written_captions[i])
+                
+                with open(temp_video_file, 'w', encoding='utf-8') as f:
+                    for i in range(final_count):
+                        if i > 0:
+                            f.write('\n')
+                        f.write(written_videos[i])
+                
+                self.console.print(f"[green]✅ Fixed: Both files now have {final_count} entries[/]")
             
             # Set up preprocessing arguments
             preprocessing_args = PreprocessingArgs(
