@@ -1,0 +1,100 @@
+# Unified LTXV Training Configuration
+# This config controls preprocessing, training, and checkpoint conversion
+
+# Dataset configuration
+dataset:
+  # Path to folder containing paired video and text files
+  # Each video file should have a corresponding text file with the same name
+  # Example: video1.mp4 + video1.txt, video2.mov + video2.txt
+  data_folder: "data/videos"
+  # Resolution buckets in format [width, height, frames]
+  resolution_buckets:
+    - [512, 512, 49]  # Can specify multiple buckets
+  # Preprocessing options
+  preprocessing:
+    batch_size: 2
+    num_workers: 0
+    vae_tiling: false
+    decode_videos: false  # Save decoded videos for verification
+    load_text_encoder_in_8bit: false
+    # Where to save preprocessed data (defaults to data_folder/.precomputed)
+    output_dir: null
+  # Optional trigger word to prepend to all captions (for LoRA training)
+  id_token: null  # e.g., "SQUISH"
+
+# Model configuration
+model:
+  model_source: "LTXV_13B_097_DEV" # Options: "LTXV_13B_097_DEV", "LTXV_2B_0.9.6_DEV", etc.
+  training_mode: "lora" # Options: "lora" or "full"
+  load_checkpoint: null # Path to checkpoint file or directory to resume from
+
+# LoRA configuration (only used if training_mode is "lora")
+lora:
+  rank: 64
+  alpha: 64
+  dropout: 0.0
+  target_modules:
+    - "to_k"
+    - "to_q"
+    - "to_v"
+    - "to_out.0"
+
+# Training configuration
+training:
+  # Whether to use distributed training
+  distributed: false
+  num_processes: null  # Auto-detect GPUs if null, for multi it would be 0,1,2 .. etc
+  # Optimization parameters
+  learning_rate: 0.0001
+  steps: 1500
+  batch_size: 1
+  gradient_accumulation_steps: 1
+  max_grad_norm: 1.0
+  optimizer_type: "adamw" # Options: "adamw" or "adamw8bit"
+  scheduler_type: "constant" # Options: "constant", "linear", "cosine", "cosine_with_restarts", "polynomial"
+  scheduler_params: {}
+  enable_gradient_checkpointing: true
+  first_frame_conditioning_p: 0.5
+
+# Acceleration optimization
+acceleration:
+  mixed_precision_mode: "bf16" # Options: "no", "fp16", "bf16"
+  quantization: null # Options: null, "int8-quanto", "int4-quanto", "int2-quanto", "fp8-quanto", "fp8uz-quanto"
+  load_text_encoder_in_8bit: false
+  compile_with_inductor: false
+  compilation_mode: "reduce-overhead" # Options: "default", "reduce-overhead", "max-autotune"
+
+# Validation configuration
+validation:
+  prompts:
+    - "CAKEIFY a person using a knife to cut a cake shaped like a sunflower"
+    - "CAKEIFY a person using a knife to cut a cake shaped like a bottle of mouthwash"
+    - "CAKEIFY a person using a knife to cut a cake shaped like a 1990s sports car"
+  negative_prompt: "worst quality, inconsistent motion, blurry, jittery, distorted"
+  video_dims: [256, 256, 25] # [width, height, frames] - Much smaller for faster validation
+  seed: 42
+  inference_steps: 20 # Reduced steps for faster validation
+  interval: 100 # Every X amount of steps it does validation. Set to null to disable validation during training
+  videos_per_prompt: 1
+  guidance_scale: 3.5
+
+# Checkpoint configuration
+checkpoints:
+  interval: 100 # Save a checkpoint every N steps, set to null to disable
+  keep_last_n: -1 # Keep only the N most recent checkpoints, set to -1 to keep all
+  # Automatic conversion to ComfyUI format
+  auto_convert_to_comfy: true  # Automatically convert LoRA checkpoints to ComfyUI format
+
+# Flow matching configuration
+flow_matching:
+  timestep_sampling_mode: "shifted_logit_normal" # Options: "uniform", "shifted_logit_normal"
+  timestep_sampling_params: {}
+
+# HuggingFace Hub configuration
+hub:
+  push_to_hub: false # Whether to push the model weights to the Hugging Face Hub
+  hub_model_id: null # Hugging Face Hub repository ID (e.g., 'username/repo-name')
+
+# General configuration
+seed: 42
+output_dir: "outputs"  # Base directory - timestamped subdirectories will be created automatically
