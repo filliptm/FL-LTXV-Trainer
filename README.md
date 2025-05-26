@@ -226,12 +226,9 @@ python scripts/preprocess_dataset.py dataset/ \
 
 ```bash
 # Using CSV/JSON/JSONL, e.g.
-python scripts/preprocess_dataset.py "C:\AI\Git Projects\LTX-Video-Trainer\data\dataset.json" `
->>     --caption-column "caption" `
->>     --video-column "media_path"`
->>     --resolution-buckets "768x768x97"`
->>     --num-workers "0"`
->>     --model-source "LTXV_13B_097_DISTILLED"
+
+```
+python scripts/preprocess_dataset.py "data/dataset.json" --caption-column "caption" --video-column "media_path" --resolution-buckets "768x768x97" --num-workers "0"
 ```
 
 ##### Output Structure
